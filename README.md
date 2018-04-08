@@ -26,21 +26,13 @@ The recommended path to using this sample is with the [Developer Rig](https://gi
 The Developer Rig is able to host the frontend Hello World files, but the EBS must be run separately. If you want to host your frontend files other than with the Developer Rig, run `node services/frontend` at the root of your project.
 
 ### Configuring and Running the Extension Backend Service
-To run the EBS, run `node services/backend`, with the following command line arguments: `-c <client id>`, `-s <secret>`, `-o <owner id>`
+Before you can run the EBS, you must first generate SSL certificates (see below). Once those are in place, you can start the EBS with `node services/backend`, with the following command line arguments: `-c <client id>`, `-s <secret>`, `-n <owner name>` 
 
-This provides the EBS with your Extension client ID, Extension secret and the user ID of the Extension owner (likely you). These are necessary to validate calls to your EBS and make calls to Twitch services such as PubSub.
+This provides the EBS with your Extension client ID, Extension secret and the user name of the Extension owner (likely you). These are necessary to validate calls to your EBS and make calls to Twitch services such as PubSub.
 
-If you do not want to pass in command line arguments, you can also directly set the following environment variables: `EXT_SECRET`, `EXT_CLIENT_ID`, `EXT_OWNER_ID` in your code.
+If you do not want to pass in command line arguments, you can also directly set the following environment variables: `EXT_SECRET`, `EXT_CLIENT_ID`, `EXT_OWNER_NAME` in your code.
 
 You can get your client ID and secret from your [Extension Dashboard](https://dev.twitch.tv/dashboard/extensions). See the documentation for the [Developer Rig](https://github.com/twitchdev/developer-rig#configuring-the-developer-rig) for more details.
-
-To get the owner ID, you will need to execute a simple CURL command against the Twitch /users endpoint. You'll need your extension client ID as part of the query (this will be made consistent with the Developer Rig shortly, by using _owner name_).
-
-```bash
-curl -H 'Client-ID: <client id>' -X GET 'https://api.twitch.tv/helix/users?login=<owner name>'
-```
-
-You will also need to generate a cert to run your EBS. See below for the steps to accomplish this.
 
 ### SSL Certificates
 Twitch Extensions require SSL (TLS).

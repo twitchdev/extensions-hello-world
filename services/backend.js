@@ -41,10 +41,14 @@ const STRINGS = {
     env_secret: `* Using env var for secret`,
     env_client_id: `* Using env var for client-id`,
     env_owner_id: `* Using env var for owner-id`,
+    env_owner_name: `* Using env var for owner-name`,
+    env_owner_name_lookup: `* Using env var for owner-name to lookup owner-id`,
     server_started: `Server running at %s`,
     missing_secret: "Extension secret required.\nUse argument '-s <secret>' or env var 'EXT_SECRET'",
     missing_clientId: "Extension client ID required.\nUse argument '-c <client ID>' or env var 'EXT_CLIENT_ID'",
     missing_ownerId: "Extension owner ID required.\nUse argument '-o <owner ID>' or env var 'EXT_OWNER_ID'",
+    ownerId_retreival_error: "Failed to find a Twitch profile for the ownerName %s",
+    ownerId_retreival_success: "Matched Twitch owner ID %s with given username %s",
     message_send_error: "Error sending message to channel %s",
     pubsub_response: "Message to c:%s returned %s",
     cycling_color: "Cycling color for c:%s on behalf of u:%s",
@@ -59,6 +63,7 @@ ext
     .option('-s, --secret <secret>', 'Extension secret')
     .option('-c, --client-id <client_id>', 'Extension client ID')
     .option('-o, --owner-id <owner_id>','Extension owner ID')
+    .option('-n, --owner-name <owner_name>','Extension owner Name')
     .parse(process.argv)
 ;
 
@@ -66,6 +71,7 @@ ext
 const ENV_SECRET = process.env.EXT_SECRET;
 const ENV_CLIENT_ID = process.env.EXT_CLIENT_ID;
 const ENV_OWNER_ID = process.env.EXT_OWNER_ID;
+const ENV_OWNER_NAME = process.env.EXT_OWNER_NAME;
 
 if(!ext.secret && ENV_SECRET) { 
     console.log(STRINGS.env_secret);
@@ -81,19 +87,36 @@ if(!ext.ownerId && ENV_OWNER_ID) {
     ext.ownerId = ENV_OWNER_ID;
 }
 
+if(!ext.ownerName && ENV_OWNER_NAME) {
+    console.log(STRINGS.env_owner_name);
+    ext.ownerName = ENV_OWNER_NAME;
+}
+
+if(!ext.ownerId) {
+    if (ext.ownerName) {
+        // Try to get the owner's ID from the name before exiting
+        getOwnerIdFromName(ext.ownerName, (ownerId) => {
+            verboseLog(STRINGS.ownerId_retreival_success, ownerId, ext.ownerName);
+            ext.ownerId = ownerId;
+        }, (err) => {
+            console.log(STRINGS.ownerId_retreival_error, ext.ownerName);
+            process.exit(1);
+        });
+    }
+    else {
+        console.log(STRINGS.missing_ownerId);
+        process.exit(1);
+    }
+}
+
 // YOU SHALL NOT PASS
 if(!ext.secret) { 
     console.log(STRINGS.missing_secret);
-    process.exit(1); 
+    process.exit(1);
 }
 if(!ext.clientId) {
     console.log(STRINGS.missing_clientId);
     process.exit(1); 
-}
-
-if(!ext.ownerId) {
-    console.log(STRINGS.missing_ownerId);
-    process.exit(1);
 }
 
 // log function that won't spam in production
@@ -112,6 +135,31 @@ const server = new Hapi.Server({
         }
     }
 });
+
+function getOwnerIdFromName(username, success, failure) {
+    // Given a username, try to get the owner ID from Twitch.
+    const options = {
+        url: `https://api.twitch.tv/helix/users?login=${username}`,
+        method: 'GET',
+        headers: {
+            'Client-ID': ext.clientId,
+            'referer': 'Twitch Hello World Extension',
+        },
+    };
+    request(options, (error, response, body) => {
+        if (error) {
+            return failure(error);
+        } else {
+            try {
+                const ownerId = JSON.parse(body)['data'][0]['id'];
+                return success(ownerId);
+            }
+            catch(err) {
+                return failure(error);
+            }
+        }
+    });
+}
 
 // use a common method for consistency
 function verifyAndDecode(header) {
