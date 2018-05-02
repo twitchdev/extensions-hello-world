@@ -24,7 +24,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 else
   echo "* Please install and trust cert at conf/$NAME.crt"
 fi
-cd $DIR 
+cd "$DIR" 
 if [[ ! -d "${DIR}/../conf/" ]]; then
   mkdir "${DIR}/../conf/"
 fi
