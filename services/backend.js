@@ -47,8 +47,8 @@ const STRINGS = {
     missing_secret: "Extension secret required.\nUse argument '-s <secret>' or env var 'EXT_SECRET'",
     missing_clientId: "Extension client ID required.\nUse argument '-c <client ID>' or env var 'EXT_CLIENT_ID'",
     missing_ownerId: "Extension owner ID required.\nUse argument '-o <owner ID>' or env var 'EXT_OWNER_ID'",
-    ownerId_retreival_error: "Failed to find a Twitch profile for the ownerName %s",
-    ownerId_retreival_success: "Matched Twitch owner ID %s with given username %s",
+    ownerId_retrieval_error: "Failed to find a Twitch profile for the ownerName %s",
+    ownerId_retrieval_success: "Matched Twitch owner ID %s with given username %s",
     message_send_error: "Error sending message to channel %s",
     pubsub_response: "Message to c:%s returned %s",
     cycling_color: "Cycling color for c:%s on behalf of u:%s",
@@ -96,10 +96,10 @@ if(!ext.ownerId) {
     if (ext.ownerName) {
         // Try to get the owner's ID from the name before exiting
         getOwnerIdFromName(ext.ownerName, (ownerId) => {
-            verboseLog(STRINGS.ownerId_retreival_success, ownerId, ext.ownerName);
+            verboseLog(STRINGS.ownerId_retrieval_success, ownerId, ext.ownerName);
             ext.ownerId = ownerId;
         }, (err) => {
-            console.log(STRINGS.ownerId_retreival_error, ext.ownerName);
+            console.log(STRINGS.ownerId_retrieval_error, ext.ownerName);
             process.exit(1);
         });
     }
