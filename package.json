@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "cert": "./bin/generate_cert.sh server",
+    "wincert": "node scripts/ssl.js",
     "start": "node services/backend",
     "frontend": "node services/frontend"
   },
