@@ -23,6 +23,10 @@ const ext = require('commander');
 const jwt = require('jsonwebtoken');
 const request = require('request');
 
+// The developer rig uses self-signed certificates.  Node doesn't accept them
+// by default.  Do not use this in production.
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
 const verboseLogging = true; // verbose logging; turn off for production
 
 const initialColor = color('#6441A4');     // super important; bleedPurple, etc.
@@ -214,7 +218,7 @@ function sendColorBroadcast(channelId) {
 
     // send our broadcast request to Twitch
     request(
-        `https://api.twitch.tv/extensions/message/${channelId}`,
+        `https://localhost.rig.twitch.tv:3000/extensions/message/${channelId}`,
         {
             method: 'POST',
             headers,
