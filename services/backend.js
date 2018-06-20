@@ -45,7 +45,7 @@ const STRINGS = {
     missing_secret: "Extension secret required.\nUse argument '-s <secret>' or env var 'EXT_SECRET'",
     missing_clientId: "Extension client ID required.\nUse argument '-c <client ID>' or env var 'EXT_CLIENT_ID'",
     missing_ownerId: "Extension owner ID required.\nUse argument '-o <owner ID>' or env var 'EXT_OWNER_ID'",
-    message_send_error: "Error sending message to channel %s",
+    message_send_error: 'Error sending message to channel %s: %s',
     pubsub_response: "Message to c:%s returned %s",
     cycling_color: "Cycling color for c:%s on behalf of u:%s",
     color_broadcast: "Broadcasting color %s for c:%s",
@@ -222,7 +222,7 @@ function sendColorBroadcast(channelId) {
         }
         , (err, res) => {
             if (err) {
-                console.log(STRINGS.messageSendError, channelId);
+                console.log(STRINGS.message_send_error, channelId, err);
             } else {
                 verboseLog(STRINGS.pubsub_response, channelId, res.statusCode);
             }
