@@ -58,13 +58,13 @@ const STRINGS = {
     invalid_jwt: "Invalid JWT"
 };
 
-ext
-    .version(require('../package.json').version)
-    .option('-s, --secret <secret>', 'Extension secret')
-    .option('-c, --client-id <client_id>', 'Extension client ID')
-    .option('-o, --owner-id <owner_id>','Extension owner ID')
-    .parse(process.argv)
-;
+ext.
+  version(require('../package.json').version).
+  option('-s, --secret <secret>', 'Extension secret').
+  option('-c, --client-id <client_id>', 'Extension client ID').
+  option('-o, --owner-id <owner_id>', 'Extension owner ID').
+  option('-l, --local', 'Developer rig local mode').
+  parse(process.argv);
 
 // hacky env var support
 const ENV_SECRET = process.env.EXT_SECRET;
@@ -216,9 +216,10 @@ function sendColorBroadcast(channelId) {
 
     verboseLog(STRINGS.color_broadcast, currentColor, channelId);
 
-    // send our broadcast request to Twitch
+    // Send the broadcast request to the Twitch API.
+    const apiHost = ext.local ? 'localhost.rig.twitch.tv:3000' : 'api.twitch.tv';
     request(
-        `https://localhost.rig.twitch.tv:3000/extensions/message/${channelId}`,
+        `https://${apiHost}/extensions/message/${channelId}`,
         {
             method: 'POST',
             headers,
