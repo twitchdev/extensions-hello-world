@@ -40,22 +40,29 @@ const channelColors = { };             // current extension state
 const channelCooldowns = { }           // rate limit compliance
 let   userCooldowns = { };             // spam prevention
 
-// TODO: i18n
+function missingOnline(name, variable) {
+  const option = name.charAt(0);
+  return `Extension ${name} required in online mode.\nUse argument "-${option} <${name}>" or environment variable "${variable}".`;
+}
+
 const STRINGS = {
-    env_secret: `* Using env var for secret`,
-    env_client_id: `* Using env var for client-id`,
-    env_owner_id: `* Using env var for owner-id`,
-    server_started: `Server running at %s`,
-    missing_secret: "Extension secret required.\nUse argument '-s <secret>' or env var 'EXT_SECRET'",
-    missing_clientId: "Extension client ID required.\nUse argument '-c <client ID>' or env var 'EXT_CLIENT_ID'",
-    missing_ownerId: "Extension owner ID required.\nUse argument '-o <owner ID>' or env var 'EXT_OWNER_ID'",
-    message_send_error: 'Error sending message to channel %s: %s',
-    pubsub_response: "Message to c:%s returned %s",
-    cycling_color: "Cycling color for c:%s on behalf of u:%s",
-    color_broadcast: "Broadcasting color %s for c:%s",
-    send_color: "Sending color %s to c:%s",
-    cooldown: "Please wait before clicking again",
-    invalid_jwt: "Invalid JWT"
+  secretEnv: 'Using environment variable for secret',
+  clientIdEnv: 'Using environment variable for client-id',
+  ownerIdEnv: 'Using environment variable for owner-id',
+  secretLocal: 'Using local mode secret',
+  clientIdLocal: 'Using local mode client-id',
+  ownerIdLocal: 'Using local mode owner-id',
+  serverStarted: 'Server running at %s',
+  secretMissing: missingOnline('secret', 'EXT_SECRET'),
+  clientIdMissing: missingOnline('client ID', 'EXT_CLIENT_ID'),
+  ownerIdMissing: missingOnline('owner ID', 'EXT_OWNER_ID'),
+  messageSendError: 'Error sending message to channel %s: %s',
+  pubsubResponse: 'Message to c:%s returned %s',
+  cyclingColor: 'Cycling color for c:%s on behalf of u:%s',
+  colorBroadcast: 'Broadcasting color %s for c:%s',
+  sendColor: 'Sending color %s to c:%s',
+  cooldown: 'Please wait before clicking again',
+  invalidJwt: 'Invalid JWT',
 };
 
 ext.
@@ -66,38 +73,25 @@ ext.
   option('-l, --local', 'Developer rig local mode').
   parse(process.argv);
 
-// hacky env var support
-const ENV_SECRET = process.env.EXT_SECRET;
-const ENV_CLIENT_ID = process.env.EXT_CLIENT_ID;
-const ENV_OWNER_ID = process.env.EXT_OWNER_ID;
+const isLocal = ext.local;
+const clientId = getOption('clientId', 'ENV_CLIENT_ID', 'u4u4u4u4u4u4u4u4u4u4u4u4u4u4u4');
+const ownerId = getOption('ownerId', 'ENV_OWNER_ID', '100000001');
+const secret = Buffer.from(getOption('secret', 'ENV_SECRET', 'kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk'), 'base64');
 
-if(!ext.secret && ENV_SECRET) { 
-    console.log(STRINGS.env_secret);
-    ext.secret = ENV_SECRET; 
-}
-if(!ext.clientId && ENV_CLIENT_ID) { 
-    console.log(STRINGS.env_client_id);
-    ext.clientId = ENV_CLIENT_ID;
-}
-
-if(!ext.ownerId && ENV_OWNER_ID) {
-    console.log(STRINGS.env_owner_id);
-    ext.ownerId = ENV_OWNER_ID;
-}
-
-// YOU SHALL NOT PASS
-if(!ext.secret) { 
-    console.log(STRINGS.missing_secret);
-    process.exit(1); 
-}
-if(!ext.clientId) {
-    console.log(STRINGS.missing_clientId);
-    process.exit(1); 
-}
-
-if(!ext.ownerId) {
-    console.log(STRINGS.missing_ownerId);
-    process.exit(1);
+// Get options from the command line, environment, or, if local mode is
+// enabled, the local value.
+function getOption(optionName, environmentName, localValue) {
+  if (ext[optionName]) {
+    return ext[optionName];
+  } else if (process.env[environmentName]) {
+    console.log(STRINGS[optionName + 'Env']);
+    return process.env[environmentName];
+  } else if (isLocal) {
+    console.log(STRINGS[optionName + 'Local']);
+    return localValue;
+  }
+  console.log(STRINGS[optionName + 'Missing']);
+  process.exit(1);
 }
 
 // log function that won't spam in production
@@ -126,7 +120,6 @@ function verifyAndDecode(header) {
         }
         
         const token = header.substring(bearerPrefix.length);
-        const secret = Buffer.from(ext.secret, 'base64');
         return jwt.verify(token, secret, { algorithms: ['HS256'] }); 
     }
     catch (e) {
@@ -138,7 +131,7 @@ function colorCycleHandler (req, h) {
 
     // once more with feeling: every request MUST be verified, for SAFETY!
     const payload = verifyAndDecode(req.headers.authorization);
-    if(!payload) { throw Boom.unauthorized(STRINGS.invalid_jwt); }
+    if(!payload) { throw Boom.unauthorized(STRINGS.invalidJwt); }
 
     const { channel_id: channelId, opaque_user_id: opaqueUserId } = payload;
 
@@ -150,7 +143,7 @@ function colorCycleHandler (req, h) {
       throw Boom.tooManyRequests(STRINGS.cooldown);
     }
 
-    verboseLog(STRINGS.cycling_color, channelId, opaqueUserId);
+    verboseLog(STRINGS.cyclingColor, channelId, opaqueUserId);
       
     // rotate the color like a wheel
     currentColor = color(currentColor).rotate(30).hex();
@@ -167,13 +160,13 @@ function colorQueryHandler(req, h) {
     
     // REMEMBER! every request MUST be verified, for SAFETY!
     const payload = verifyAndDecode(req.headers.authorization);
-    if(!payload) { throw Boom.unauthorized(STRINGS.invalid_jwt); } // seriously though
+    if(!payload) { throw Boom.unauthorized(STRINGS.invalidJwt); } // seriously though
 
     const { channel_id: channelId, opaque_user_id: opaqueUserId } = payload;
 
     const currentColor = color(channelColors[channelId] || initialColor).hex();
 
-    verboseLog(STRINGS.send_color, currentColor, opaqueUserId);
+    verboseLog(STRINGS.sendColor, currentColor, opaqueUserId);
     return currentColor;
 }
 
@@ -200,7 +193,7 @@ function sendColorBroadcast(channelId) {
   
     // our HTTP headers to the Twitch API
     const headers = {
-        'Client-Id': ext.clientId,
+        'Client-Id': clientId,
         'Content-Type': 'application/json',
         'Authorization': bearerPrefix + makeServerToken(channelId)
     };
@@ -214,10 +207,10 @@ function sendColorBroadcast(channelId) {
         targets: [ 'broadcast' ]
     });
 
-    verboseLog(STRINGS.color_broadcast, currentColor, channelId);
+    verboseLog(STRINGS.colorBroadcast, currentColor, channelId);
 
     // Send the broadcast request to the Twitch API.
-    const apiHost = ext.local ? 'localhost.rig.twitch.tv:3000' : 'api.twitch.tv';
+    const apiHost = isLocal ? 'localhost.rig.twitch.tv:3000' : 'api.twitch.tv';
     request(
         `https://${apiHost}/extensions/message/${channelId}`,
         {
@@ -227,9 +220,9 @@ function sendColorBroadcast(channelId) {
         }
         , (err, res) => {
             if (err) {
-                console.log(STRINGS.message_send_error, channelId, err);
+                console.log(STRINGS.messageSendError, channelId, err);
             } else {
-                verboseLog(STRINGS.pubsub_response, channelId, res.statusCode);
+                verboseLog(STRINGS.pubsubResponse, channelId, res.statusCode);
             }
     });
 }
@@ -239,14 +232,13 @@ function makeServerToken(channelId) {
     const payload = {
         exp: Math.floor(Date.now() / 1000) + serverTokenDurationSec,
         channel_id: channelId,
-        user_id: ext.ownerId, // extension owner ID for the call to Twitch PubSub
+        user_id: ownerId, // extension owner ID for the call to Twitch PubSub
         role: 'external',
         pubsub_perms: {
             send: [ '*' ],
         },
     }
 
-    const secret = Buffer.from(ext.secret, 'base64');
     return jwt.sign(payload, secret, { algorithm: 'HS256' });
 }
 
@@ -281,7 +273,7 @@ function userIsInCooldown(opaqueUserId) {
 
     await server.start();
 
-    console.log(STRINGS.server_started, server.info.uri);
+    console.log(STRINGS.serverStarted, server.info.uri);
 
     // periodically clear cooldown tracking to prevent unbounded growth due to
     // per-session logged out user tokens
