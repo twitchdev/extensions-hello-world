@@ -70,13 +70,18 @@ ext.
   option('-s, --secret <secret>', 'Extension secret').
   option('-c, --client-id <client_id>', 'Extension client ID').
   option('-o, --owner-id <owner_id>', 'Extension owner ID').
-  option('-l, --local', 'Developer rig local mode').
+  option('-l, --local <manifest_file>', 'Developer rig local mode').
+  option('-r, --rig-port <rig_port>', 'Developer rig service port').
   parse(process.argv);
 
-const isLocal = ext.local;
-const clientId = getOption('clientId', 'ENV_CLIENT_ID', 'u4u4u4u4u4u4u4u4u4u4u4u4u4u4u4');
 const ownerId = getOption('ownerId', 'ENV_OWNER_ID', '100000001');
 const secret = Buffer.from(getOption('secret', 'ENV_SECRET', 'kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk'), 'base64');
+let clientId;
+if (ext.local) {
+  const localFileLocation = path.resolve(process.cwd(), ext.local);
+  clientId = require(localFileLocation).clientId;
+}
+clientId = getOption('clientId', 'ENV_CLIENT_ID', clientId);
 
 // Get options from the command line, environment, or, if local mode is
 // enabled, the local value.
@@ -86,7 +91,7 @@ function getOption(optionName, environmentName, localValue) {
   } else if (process.env[environmentName]) {
     console.log(STRINGS[optionName + 'Env']);
     return process.env[environmentName];
-  } else if (isLocal) {
+  } else if (ext.local) {
     console.log(STRINGS[optionName + 'Local']);
     return localValue;
   }
@@ -210,7 +215,7 @@ function sendColorBroadcast(channelId) {
     verboseLog(STRINGS.colorBroadcast, currentColor, channelId);
 
     // Send the broadcast request to the Twitch API.
-    const apiHost = isLocal ? 'localhost.rig.twitch.tv:3000' : 'api.twitch.tv';
+    const apiHost = ext.local ? `localhost.rig.twitch.tv:${ext.rig_port || 3000}` : 'api.twitch.tv';
     request(
         `https://${apiHost}/extensions/message/${channelId}`,
         {
