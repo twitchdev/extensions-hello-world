@@ -1,12 +1,12 @@
 /**
  *    Copyright 2018 Amazon.com, Inc. or its affiliates
- * 
+ *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
  *    You may obtain a copy of the License at
- * 
+ *
  *        http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  *    Unless required by applicable law or agreed to in writing, software
  *    distributed under the License is distributed on an "AS IS" BASIS,
  *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -27,18 +27,21 @@ const request = require('request');
 // by default.  Do not use this in production.
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
-const verboseLogging = true; // verbose logging; turn off for production
+// Use verbose logging during development.  Set this to false for production.
+const verboseLogging = true;
+const verboseLog = verboseLogging ? console.log.bind(console) : () => { };
 
-const initialColor = color('#6441A4');     // super important; bleedPurple, etc.
-const serverTokenDurationSec = 30;         // our tokens for pubsub expire after 30 seconds
-const userCooldownMs = 1000;               // maximum input rate per user to prevent bot abuse
-const userCooldownClearIntervalMs = 60000; // interval to reset our tracking object
-const channelCooldownMs = 1000;            // maximum broadcast rate per channel
-const bearerPrefix = 'Bearer ';            // JWT auth headers have this prefix
-
-const channelColors = { };             // current extension state
-const channelCooldowns = { }           // rate limit compliance
-let   userCooldowns = { };             // spam prevention
+// Service state variables
+const initialColor = color('#6441A4');      // super important; bleedPurple, etc.
+const serverTokenDurationSec = 30;          // our tokens for pubsub expire after 30 seconds
+const userCooldownMs = 1000;                // maximum input rate per user to prevent bot abuse
+const userCooldownClearIntervalMs = 60000;  // interval to reset our tracking object
+const channelCooldownMs = 1000;             // maximum broadcast rate per channel
+const bearerPrefix = 'Bearer ';             // HTTP authorization headers have this prefix
+const colorWheelRotation = 30;
+const channelColors = {};
+const channelCooldowns = {};                // rate limit compliance
+let userCooldowns = {};                     // spam prevention
 
 function missingOnline(name, variable) {
   const option = name.charAt(0);
@@ -99,189 +102,167 @@ function getOption(optionName, environmentName, localValue) {
   process.exit(1);
 }
 
-// log function that won't spam in production
-const verboseLog = verboseLogging ? console.log.bind(console) : function(){}
-
 const server = new Hapi.Server({
-    host: 'localhost',
-    port: 8081,
-    tls: { // if you need a certificate, use `npm run cert`
-        key: fs.readFileSync(path.resolve(__dirname, '../conf/server.key')),
-        cert: fs.readFileSync(path.resolve(__dirname, '../conf/server.crt')),
+  host: 'localhost',
+  port: 8081,
+  tls: {
+    // If you need a certificate, execute "npm run cert".
+    key: fs.readFileSync(path.resolve(__dirname, '../conf/server.key')),
+    cert: fs.readFileSync(path.resolve(__dirname, '../conf/server.crt')),
+  },
+  routes: {
+    cors: {
+      origin: ['*'],
     },
-    routes: { 
-        cors: {
-            origin: ['*']
-        }
-    }
+  },
 });
 
-// use a common method for consistency
+// Verify the header and the enclosed JWT.
 function verifyAndDecode(header) {
-
+  if (header.startsWith(bearerPrefix)) {
     try {
-        if (!header.startsWith(bearerPrefix)) {
-            return false;
-        }
-        
-        const token = header.substring(bearerPrefix.length);
-        return jwt.verify(token, secret, { algorithms: ['HS256'] }); 
+      const token = header.substring(bearerPrefix.length);
+      return jwt.verify(token, secret, { algorithms: ['HS256'] });
     }
-    catch (e) {
-        return false;
+    catch (ex) {
     }
+  }
+  throw Boom.unauthorized(STRINGS.invalidJwt);
 }
 
-function colorCycleHandler (req, h) {
+function colorCycleHandler(req) {
+  // Verify all requests.
+  const payload = verifyAndDecode(req.headers.authorization);
+  const { channel_id: channelId, opaque_user_id: opaqueUserId } = payload;
 
-    // once more with feeling: every request MUST be verified, for SAFETY!
-    const payload = verifyAndDecode(req.headers.authorization);
-    if(!payload) { throw Boom.unauthorized(STRINGS.invalidJwt); }
+  // Store the color for the channel.
+  let currentColor = channelColors[channelId] || initialColor;
 
-    const { channel_id: channelId, opaque_user_id: opaqueUserId } = payload;
+  // Bot abuse prevention:  don't allow a user to spam the button.
+  if (userIsInCooldown(opaqueUserId)) {
+    throw Boom.tooManyRequests(STRINGS.cooldown);
+  }
 
-    // we need to store the color for each channel using the extension
-    let currentColor = channelColors[channelId] || initialColor;
-    
-    // bot abuse prevention - don't allow a single user to spam the button
-    if (userIsInCooldown(opaqueUserId)) {
-      throw Boom.tooManyRequests(STRINGS.cooldown);
-    }
+  // Rotate the color as if on a color wheel.
+  verboseLog(STRINGS.cyclingColor, channelId, opaqueUserId);
+  currentColor = color(currentColor).rotate(colorWheelRotation).hex();
 
-    verboseLog(STRINGS.cyclingColor, channelId, opaqueUserId);
-      
-    // rotate the color like a wheel
-    currentColor = color(currentColor).rotate(30).hex();
-    
-    // save the new color for the channel
-    channelColors[channelId] = currentColor;
-    
-    attemptColorBroadcast(channelId)
-    
-    return currentColor;
-};
+  // Save the new color for the channel.
+  channelColors[channelId] = currentColor;
 
-function colorQueryHandler(req, h) {
-    
-    // REMEMBER! every request MUST be verified, for SAFETY!
-    const payload = verifyAndDecode(req.headers.authorization);
-    if(!payload) { throw Boom.unauthorized(STRINGS.invalidJwt); } // seriously though
+  // Broadcast the color change to all other extension instances on this channel.
+  attemptColorBroadcast(channelId);
 
-    const { channel_id: channelId, opaque_user_id: opaqueUserId } = payload;
+  return currentColor;
+}
 
-    const currentColor = color(channelColors[channelId] || initialColor).hex();
+function colorQueryHandler(req) {
+  // Verify all requests.
+  const payload = verifyAndDecode(req.headers.authorization);
 
-    verboseLog(STRINGS.sendColor, currentColor, opaqueUserId);
-    return currentColor;
+  // Get the color for the channel from the payload and return it.
+  const { channel_id: channelId, opaque_user_id: opaqueUserId } = payload;
+  const currentColor = color(channelColors[channelId] || initialColor).hex();
+  verboseLog(STRINGS.sendColor, currentColor, opaqueUserId);
+  return currentColor;
 }
 
 function attemptColorBroadcast(channelId) {
-  
-  // per-channel rate limit handler
+  // Check the cool-down to determine if it's okay to send now.
   const now = Date.now();
   const cooldown = channelCooldowns[channelId];
-  
-  if (!cooldown || cooldown.time < now) { 
-    // we can send immediately because we're outside the cooldown
+  if (!cooldown || cooldown.time < now) {
+    // It is.
     sendColorBroadcast(channelId);
     channelCooldowns[channelId] = { time: now + channelCooldownMs };
-    return;
-  }
-  
-  // schedule a delayed broadcast only if we haven't already
-  if (!cooldown.trigger) {
-      cooldown.trigger = setTimeout(sendColorBroadcast, now - cooldown.time, channelId);
+  } else if (!cooldown.trigger) {
+    // It isn't; schedule a delayed broadcast if we haven't already done so.
+    cooldown.trigger = setTimeout(sendColorBroadcast, now - cooldown.time, channelId);
   }
 }
 
 function sendColorBroadcast(channelId) {
-  
-    // our HTTP headers to the Twitch API
-    const headers = {
-        'Client-Id': clientId,
-        'Content-Type': 'application/json',
-        'Authorization': bearerPrefix + makeServerToken(channelId)
-    };
-    
-    const currentColor = color(channelColors[channelId] || initialColor).hex();
+  // Set the HTTP headers required by the Twitch API.
+  const headers = {
+    'Client-Id': clientId,
+    'Content-Type': 'application/json',
+    'Authorization': bearerPrefix + makeServerToken(channelId),
+  };
 
-    // our POST body to the Twitch API
-    const body = JSON.stringify({
-        content_type: 'application/json',
-        message: currentColor,
-        targets: [ 'broadcast' ]
-    });
+  // Create the POST body for the Twitch API request.
+  const currentColor = color(channelColors[channelId] || initialColor).hex();
+  const body = JSON.stringify({
+    content_type: 'application/json',
+    message: currentColor,
+    targets: ['broadcast'],
+  });
 
-    verboseLog(STRINGS.colorBroadcast, currentColor, channelId);
-
-    // Send the broadcast request to the Twitch API.
-    const apiHost = ext.local ? `localhost.rig.twitch.tv:${ext.rig_port || 3000}` : 'api.twitch.tv';
-    request(
-        `https://${apiHost}/extensions/message/${channelId}`,
-        {
-            method: 'POST',
-            headers,
-            body
-        }
-        , (err, res) => {
-            if (err) {
-                console.log(STRINGS.messageSendError, channelId, err);
-            } else {
-                verboseLog(STRINGS.pubsubResponse, channelId, res.statusCode);
-            }
+  // Send the broadcast request to the Twitch API.
+  verboseLog(STRINGS.colorBroadcast, currentColor, channelId);
+  const apiHost = ext.local ? `localhost.rig.twitch.tv:${ext.rig_port || 3000}` : 'api.twitch.tv';
+  request(
+    `https://${apiHost}/extensions/message/${channelId}`,
+    {
+      method: 'POST',
+      headers,
+      body,
+    }
+    , (err, res) => {
+      if (err) {
+        console.log(STRINGS.messageSendError, channelId, err);
+      } else {
+        verboseLog(STRINGS.pubsubResponse, channelId, res.statusCode);
+      }
     });
 }
 
+// Create and return a JWT for use by this service.
 function makeServerToken(channelId) {
-  
-    const payload = {
-        exp: Math.floor(Date.now() / 1000) + serverTokenDurationSec,
-        channel_id: channelId,
-        user_id: ownerId, // extension owner ID for the call to Twitch PubSub
-        role: 'external',
-        pubsub_perms: {
-            send: [ '*' ],
-        },
-    }
-
-    return jwt.sign(payload, secret, { algorithm: 'HS256' });
+  const payload = {
+    exp: Math.floor(Date.now() / 1000) + serverTokenDurationSec,
+    channel_id: channelId,
+    user_id: ownerId, // extension owner ID for the call to Twitch PubSub
+    role: 'external',
+    pubsub_perms: {
+      send: ['*'],
+    },
+  };
+  return jwt.sign(payload, secret, { algorithm: 'HS256' });
 }
 
 function userIsInCooldown(opaqueUserId) {
-  
-    const cooldown = userCooldowns[opaqueUserId];
-    const now = Date.now();
-    if (cooldown && cooldown > now) {
-        return true;
-    }
-    
-    // voting extensions should also track per-user votes to prevent skew
-    userCooldowns[opaqueUserId] = now + userCooldownMs;
-    return false;
+  // Check if the user is in cool-down.
+  const cooldown = userCooldowns[opaqueUserId];
+  const now = Date.now();
+  if (cooldown && cooldown > now) {
+    return true;
+  }
+
+  // Voting extensions must also track per-user votes to prevent skew.
+  userCooldowns[opaqueUserId] = now + userCooldownMs;
+  return false;
 }
 
-(async () => { // we await top-level await ;P
-  
-    // viewer wants to cycle the color
-    server.route({
-        method: 'POST',
-        path: '/color/cycle',
-        handler: colorCycleHandler
-    });
+(async () => {
+  // Handle a viewer request to cycle the color.
+  server.route({
+    method: 'POST',
+    path: '/color/cycle',
+    handler: colorCycleHandler,
+  });
 
-    // new viewer is requesting the color
-    server.route({
-        method: 'GET',
-        path: '/color/query',
-        handler: colorQueryHandler
-    });
+  // Handle a new viewer requesting the color.
+  server.route({
+    method: 'GET',
+    path: '/color/query',
+    handler: colorQueryHandler,
+  });
 
-    await server.start();
+  // Start the server.
+  await server.start();
+  console.log(STRINGS.serverStarted, server.info.uri);
 
-    console.log(STRINGS.serverStarted, server.info.uri);
-
-    // periodically clear cooldown tracking to prevent unbounded growth due to
-    // per-session logged out user tokens
-    setInterval(function() { userCooldowns = {} }, userCooldownClearIntervalMs)
-
-})(); // IIFE you know what I mean ;)
+  // Periodically clear cool-down tracking to prevent unbounded growth due to
+  // per-session logged-out user tokens.
+  setInterval(() => { userCooldowns = {}; }, userCooldownClearIntervalMs);
+})();
