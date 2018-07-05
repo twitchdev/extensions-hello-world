@@ -74,7 +74,6 @@ ext.
   option('-c, --client-id <client_id>', 'Extension client ID').
   option('-o, --owner-id <owner_id>', 'Extension owner ID').
   option('-l, --local <manifest_file>', 'Developer rig local mode').
-  option('-r, --rig-port <rig_port>', 'Developer rig service port').
   parse(process.argv);
 
 const ownerId = getOption('ownerId', 'ENV_OWNER_ID', '100000001');
@@ -199,7 +198,7 @@ function sendColorBroadcast(channelId) {
 
   // Send the broadcast request to the Twitch API.
   verboseLog(STRINGS.colorBroadcast, currentColor, channelId);
-  const apiHost = ext.local ? `localhost.rig.twitch.tv:${ext.rig_port || 3000}` : 'api.twitch.tv';
+  const apiHost = ext.local ? 'localhost.rig.twitch.tv:3000' : 'api.twitch.tv';
   request(
     `https://${apiHost}/extensions/message/${channelId}`,
     {
