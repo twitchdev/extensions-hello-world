@@ -1,12 +1,12 @@
-var token, userId;
+let token, userId;
 
-var twitch = window.Twitch.ext;
+const twitch = window.Twitch.ext;
 
-twitch.onContext(function(context) {
-    twitch.rig.log(context);
+twitch.onContext((context) => {
+  twitch.rig.log(context);
 });
 
-twitch.onAuthorized(function(auth) {
-    token = auth.token;
-    userId = auth.userId;
+twitch.onAuthorized((auth) => {
+  token = auth.token;
+  userId = auth.userId;
 });
