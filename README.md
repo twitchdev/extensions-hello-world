@@ -1,8 +1,8 @@
 # Extensions-Hello-World
-The Simplest Extension in the (Hello) World.
+The Simplest Extension in the (Hello) World.  Now supporting Local Mode in the Developer Rig.
 
 ## Motivation
-The Hello World sample is designed to get you started building a Twitch Extension quickly. It contains all the key parts of a functioning Extension and can be immediately run in the [Developer Rig](https://github.com/twitchdev/developer-rig).
+The Hello World sample is designed to get you started building a Twitch Extension quickly. It contains all the key parts of a functioning Extension and can be immediately run in the [Developer Rig](https://github.com/twitchdev/developer-rig).  It works in both online mode and local mode.  For a fast guide to get started, visit the Developer Rig documentation.
 
 ## What's in the Sample
 The Hello World Extension provides a simple scenario that demonstrates the end-to-end flow of an Extension. On the frontend, a user clicks a button that can change the color of a circle. Instead of changing the CSS locally, it calls its Extension Backend Service (EBS) to update the color of the circle. That message is then sent via Twitch PubSub to update all clients listening to the PubSub topic.
@@ -16,14 +16,34 @@ __The sample is broken into two main components:__
 2. A lightweight EBS that performs the following functionality:
     * Spins up a simple HTTPS server with a POST handler for changing color
     * Validates an Extension JWT
-    * Sends a new color message via Twitch PubSub for a specific channel
+    * Sends a new color message via Twitch PubSub (or a local mock version of Twitch PubSub for Local Mode) for a specific channel
 
 ## Using the Sample
 The recommended path to using this sample is with the [Developer Rig](/twitchdev/developer-rig). Use the Developer Rig's `extension-init` command to clone this repository.
 
-The Developer Rig is able to host the frontend Hello World files, but the EBS must be run separately.
+The Developer Rig is able to host the frontend Hello World files, but the EBS must be run and hosted separately.
 
-### Configuring and Running the Extension Backend Service
+### Setting Up Your Backend Certs
+Twitch Extensions require SSL (TLS).
+
+If you didn't already follow the Getting Started Guide in the Developer Rig's README, you'll need to set up a certificate for local development.  This will generate a new certificate (`server.crt` and `server.key`) for you and place it in the `conf/` directory. This certificate is different from the one used for the Developer Rig.
+
+#### On MacOS
+Navigate to the root of the Hello World extension folder and run `npm install` and then `npm run cert`
+
+#### On Windows
+Run the following commands to generate the necessary certs for your Hello World backend
+  1. `node scripts/ssl.js`
+  2. `mkdir ../my-extension/conf`
+  3. `mv ssl/selfsigned.crt ../my-extension/conf/server.crt`
+  4. `mv ssl/selfsigned.key ../my-extension/conf/server.key`
+
+### Running Hello World in Local Mode in the Developer Rig
+You can use the Developer Rig to host your front end files using the `yarn host` commands (see Developer Rig Documentation).
+
+To host your EBS in Local Mode, use the following command: `node services/backend -l ../manifest.json`  In this case, the manifest.json file has been generated using a Developer Rig yarn command.  
+
+### Running Hello World in Online Mode
 To run the EBS, run `node services/backend`, with the following command line arguments: `-c <client id>`, `-s <secret>`, `-o <owner id>`.  To run it in local mode, use only `-l <config-file>` instead. See the [Developer Rig](/twitchdev/developer-rig#configuring-the-developer-rig) for more information about the configuration file.
 
 This provides the EBS with your Extension client ID, Extension secret and the user ID of the Extension owner (likely you). These are necessary to validate calls to your EBS and make calls to Twitch services such as PubSub.
@@ -38,11 +58,4 @@ To get the owner ID, you will need to execute a simple CURL command against the 
 curl -H 'Client-ID: <client id>' -X GET 'https://api.twitch.tv/helix/users?login=<owner name>'
 ```
 
-You will also need to generate an SSL certificate to run your EBS. See below for the steps to accomplish this.
-
-### SSL Certificates
-Twitch Extensions require SSL (TLS).
-
-If you need a certificate for local development, please use the `npm run cert` command. This will generate a new certificate (`server.crt` and `server.key`) for you and place it in the `conf/` directory. This certificate is different from the one used for the Developer Rig. If you're on OS X, this command will automatically add the certificate to your keychain. If you're on Windows, you will need to either configure your browser to accept self-signed certificates or install them manually to avoid the scary "connection not secure" warnings. Check out the [Microsoft Docs](https://docs.microsoft.com/en-us/dotnet/framework/wcf/feature-details/how-to-create-temporary-certificates-for-use-during-development) for more information on generating and installing certificates on Windows.
-
-**Note -** Although the Developer Rig's local mode allows you to develop your extension without onboarding, you will need to do so to live-test your extension. You can start that process [here](https://dev.twitch.tv/extensions).
+**Note -** Although the Developer Rig's local mode allows you to develop your extension without onboarding, you will need to do so to live-test your extension against Twitch Production APIs. You can start that process [here](https://dev.twitch.tv/extensions).
