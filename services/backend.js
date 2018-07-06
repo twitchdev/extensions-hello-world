@@ -1,12 +1,12 @@
 /**
  *    Copyright 2018 Amazon.com, Inc. or its affiliates
- * 
+ *
  *    Licensed under the Apache License, Version 2.0 (the "License");
  *    you may not use this file except in compliance with the License.
  *    You may obtain a copy of the License at
- * 
+ *
  *        http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  *    Unless required by applicable law or agreed to in writing, software
  *    distributed under the License is distributed on an "AS IS" BASIS,
  *    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -23,263 +23,245 @@ const ext = require('commander');
 const jwt = require('jsonwebtoken');
 const request = require('request');
 
-const verboseLogging = true; // verbose logging; turn off for production
+// The developer rig uses self-signed certificates.  Node doesn't accept them
+// by default.  Do not use this in production.
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 
-const initialColor = color('#6441A4');     // super important; bleedPurple, etc.
-const serverTokenDurationSec = 30;         // our tokens for pubsub expire after 30 seconds
-const userCooldownMs = 1000;               // maximum input rate per user to prevent bot abuse
-const userCooldownClearIntervalMs = 60000; // interval to reset our tracking object
-const channelCooldownMs = 1000;            // maximum broadcast rate per channel
-const bearerPrefix = 'Bearer ';            // JWT auth headers have this prefix
+// Use verbose logging during development.  Set this to false for production.
+const verboseLogging = true;
+const verboseLog = verboseLogging ? console.log.bind(console) : () => { };
 
-const channelColors = { };             // current extension state
-const channelCooldowns = { }           // rate limit compliance
-let   userCooldowns = { };             // spam prevention
+// Service state variables
+const initialColor = color('#6441A4');      // super important; bleedPurple, etc.
+const serverTokenDurationSec = 30;          // our tokens for pubsub expire after 30 seconds
+const userCooldownMs = 1000;                // maximum input rate per user to prevent bot abuse
+const userCooldownClearIntervalMs = 60000;  // interval to reset our tracking object
+const channelCooldownMs = 1000;             // maximum broadcast rate per channel
+const bearerPrefix = 'Bearer ';             // HTTP authorization headers have this prefix
+const colorWheelRotation = 30;
+const channelColors = {};
+const channelCooldowns = {};                // rate limit compliance
+let userCooldowns = {};                     // spam prevention
 
-// TODO: i18n
+function missingOnline(name, variable) {
+  const option = name.charAt(0);
+  return `Extension ${name} required in online mode.\nUse argument "-${option} <${name}>" or environment variable "${variable}".`;
+}
+
 const STRINGS = {
-    env_secret: `* Using env var for secret`,
-    env_client_id: `* Using env var for client-id`,
-    env_owner_id: `* Using env var for owner-id`,
-    server_started: `Server running at %s`,
-    missing_secret: "Extension secret required.\nUse argument '-s <secret>' or env var 'EXT_SECRET'",
-    missing_clientId: "Extension client ID required.\nUse argument '-c <client ID>' or env var 'EXT_CLIENT_ID'",
-    missing_ownerId: "Extension owner ID required.\nUse argument '-o <owner ID>' or env var 'EXT_OWNER_ID'",
-    message_send_error: "Error sending message to channel %s",
-    pubsub_response: "Message to c:%s returned %s",
-    cycling_color: "Cycling color for c:%s on behalf of u:%s",
-    color_broadcast: "Broadcasting color %s for c:%s",
-    send_color: "Sending color %s to c:%s",
-    cooldown: "Please wait before clicking again",
-    invalid_jwt: "Invalid JWT"
+  secretEnv: 'Using environment variable for secret',
+  clientIdEnv: 'Using environment variable for client-id',
+  ownerIdEnv: 'Using environment variable for owner-id',
+  secretLocal: 'Using local mode secret',
+  clientIdLocal: 'Using local mode client-id',
+  ownerIdLocal: 'Using local mode owner-id',
+  serverStarted: 'Server running at %s',
+  secretMissing: missingOnline('secret', 'EXT_SECRET'),
+  clientIdMissing: missingOnline('client ID', 'EXT_CLIENT_ID'),
+  ownerIdMissing: missingOnline('owner ID', 'EXT_OWNER_ID'),
+  messageSendError: 'Error sending message to channel %s: %s',
+  pubsubResponse: 'Message to c:%s returned %s',
+  cyclingColor: 'Cycling color for c:%s on behalf of u:%s',
+  colorBroadcast: 'Broadcasting color %s for c:%s',
+  sendColor: 'Sending color %s to c:%s',
+  cooldown: 'Please wait before clicking again',
+  invalidJwt: 'Invalid JWT',
 };
 
-ext
-    .version(require('../package.json').version)
-    .option('-s, --secret <secret>', 'Extension secret')
-    .option('-c, --client-id <client_id>', 'Extension client ID')
-    .option('-o, --owner-id <owner_id>','Extension owner ID')
-    .parse(process.argv)
-;
+ext.
+  version(require('../package.json').version).
+  option('-s, --secret <secret>', 'Extension secret').
+  option('-c, --client-id <client_id>', 'Extension client ID').
+  option('-o, --owner-id <owner_id>', 'Extension owner ID').
+  option('-l, --local <manifest_file>', 'Developer rig local mode').
+  parse(process.argv);
 
-// hacky env var support
-const ENV_SECRET = process.env.EXT_SECRET;
-const ENV_CLIENT_ID = process.env.EXT_CLIENT_ID;
-const ENV_OWNER_ID = process.env.EXT_OWNER_ID;
+const ownerId = getOption('ownerId', 'ENV_OWNER_ID', '100000001');
+const secret = Buffer.from(getOption('secret', 'ENV_SECRET', 'kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk'), 'base64');
+let clientId;
+if (ext.local) {
+  const localFileLocation = path.resolve(process.cwd(), ext.local);
+  clientId = require(localFileLocation).clientId;
+}
+clientId = getOption('clientId', 'ENV_CLIENT_ID', clientId);
 
-if(!ext.secret && ENV_SECRET) { 
-    console.log(STRINGS.env_secret);
-    ext.secret = ENV_SECRET; 
+// Get options from the command line, environment, or, if local mode is
+// enabled, the local value.
+function getOption(optionName, environmentName, localValue) {
+  if (ext[optionName]) {
+    return ext[optionName];
+  } else if (process.env[environmentName]) {
+    console.log(STRINGS[optionName + 'Env']);
+    return process.env[environmentName];
+  } else if (ext.local) {
+    console.log(STRINGS[optionName + 'Local']);
+    return localValue;
+  }
+  console.log(STRINGS[optionName + 'Missing']);
+  process.exit(1);
 }
-if(!ext.clientId && ENV_CLIENT_ID) { 
-    console.log(STRINGS.env_client_id);
-    ext.clientId = ENV_CLIENT_ID;
-}
-
-if(!ext.ownerId && ENV_OWNER_ID) {
-    console.log(STRINGS.env_owner_id);
-    ext.ownerId = ENV_OWNER_ID;
-}
-
-// YOU SHALL NOT PASS
-if(!ext.secret) { 
-    console.log(STRINGS.missing_secret);
-    process.exit(1); 
-}
-if(!ext.clientId) {
-    console.log(STRINGS.missing_clientId);
-    process.exit(1); 
-}
-
-if(!ext.ownerId) {
-    console.log(STRINGS.missing_ownerId);
-    process.exit(1);
-}
-
-// log function that won't spam in production
-const verboseLog = verboseLogging ? console.log.bind(console) : function(){}
 
 const server = new Hapi.Server({
-    host: 'localhost',
-    port: 8081,
-    tls: { // if you need a certificate, use `npm run cert`
-        key: fs.readFileSync(path.resolve(__dirname, '../conf/server.key')),
-        cert: fs.readFileSync(path.resolve(__dirname, '../conf/server.crt')),
+  host: 'localhost',
+  port: 8081,
+  tls: {
+    // If you need a certificate, execute "npm run cert".
+    key: fs.readFileSync(path.resolve(__dirname, '../conf/server.key')),
+    cert: fs.readFileSync(path.resolve(__dirname, '../conf/server.crt')),
+  },
+  routes: {
+    cors: {
+      origin: ['*'],
     },
-    routes: { 
-        cors: {
-            origin: ['*']
-        }
-    }
+  },
 });
 
-// use a common method for consistency
+// Verify the header and the enclosed JWT.
 function verifyAndDecode(header) {
-
+  if (header.startsWith(bearerPrefix)) {
     try {
-        if (!header.startsWith(bearerPrefix)) {
-            return false;
-        }
-        
-        const token = header.substring(bearerPrefix.length);
-        const secret = Buffer.from(ext.secret, 'base64');
-        return jwt.verify(token, secret, { algorithms: ['HS256'] }); 
+      const token = header.substring(bearerPrefix.length);
+      return jwt.verify(token, secret, { algorithms: ['HS256'] });
     }
-    catch (e) {
-        return false;
+    catch (ex) {
     }
+  }
+  throw Boom.unauthorized(STRINGS.invalidJwt);
 }
 
-function colorCycleHandler (req, h) {
+function colorCycleHandler(req) {
+  // Verify all requests.
+  const payload = verifyAndDecode(req.headers.authorization);
+  const { channel_id: channelId, opaque_user_id: opaqueUserId } = payload;
 
-    // once more with feeling: every request MUST be verified, for SAFETY!
-    const payload = verifyAndDecode(req.headers.authorization);
-    if(!payload) { throw Boom.unauthorized(STRINGS.invalid_jwt); }
+  // Store the color for the channel.
+  let currentColor = channelColors[channelId] || initialColor;
 
-    const { channel_id: channelId, opaque_user_id: opaqueUserId } = payload;
+  // Bot abuse prevention:  don't allow a user to spam the button.
+  if (userIsInCooldown(opaqueUserId)) {
+    throw Boom.tooManyRequests(STRINGS.cooldown);
+  }
 
-    // we need to store the color for each channel using the extension
-    let currentColor = channelColors[channelId] || initialColor;
-    
-    // bot abuse prevention - don't allow a single user to spam the button
-    if (userIsInCooldown(opaqueUserId)) {
-      throw Boom.tooManyRequests(STRINGS.cooldown);
-    }
+  // Rotate the color as if on a color wheel.
+  verboseLog(STRINGS.cyclingColor, channelId, opaqueUserId);
+  currentColor = color(currentColor).rotate(colorWheelRotation).hex();
 
-    verboseLog(STRINGS.cycling_color, channelId, opaqueUserId);
-      
-    // rotate the color like a wheel
-    currentColor = color(currentColor).rotate(30).hex();
-    
-    // save the new color for the channel
-    channelColors[channelId] = currentColor;
-    
-    attemptColorBroadcast(channelId)
-    
-    return currentColor;
-};
+  // Save the new color for the channel.
+  channelColors[channelId] = currentColor;
 
-function colorQueryHandler(req, h) {
-    
-    // REMEMBER! every request MUST be verified, for SAFETY!
-    const payload = verifyAndDecode(req.headers.authorization);
-    if(!payload) { throw Boom.unauthorized(STRINGS.invalid_jwt); } // seriously though
+  // Broadcast the color change to all other extension instances on this channel.
+  attemptColorBroadcast(channelId);
 
-    const { channel_id: channelId, opaque_user_id: opaqueUserId } = payload;
+  return currentColor;
+}
 
-    const currentColor = color(channelColors[channelId] || initialColor).hex();
+function colorQueryHandler(req) {
+  // Verify all requests.
+  const payload = verifyAndDecode(req.headers.authorization);
 
-    verboseLog(STRINGS.send_color, currentColor, opaqueUserId);
-    return currentColor;
+  // Get the color for the channel from the payload and return it.
+  const { channel_id: channelId, opaque_user_id: opaqueUserId } = payload;
+  const currentColor = color(channelColors[channelId] || initialColor).hex();
+  verboseLog(STRINGS.sendColor, currentColor, opaqueUserId);
+  return currentColor;
 }
 
 function attemptColorBroadcast(channelId) {
-  
-  // per-channel rate limit handler
+  // Check the cool-down to determine if it's okay to send now.
   const now = Date.now();
   const cooldown = channelCooldowns[channelId];
-  
-  if (!cooldown || cooldown.time < now) { 
-    // we can send immediately because we're outside the cooldown
+  if (!cooldown || cooldown.time < now) {
+    // It is.
     sendColorBroadcast(channelId);
     channelCooldowns[channelId] = { time: now + channelCooldownMs };
-    return;
-  }
-  
-  // schedule a delayed broadcast only if we haven't already
-  if (!cooldown.trigger) {
-      cooldown.trigger = setTimeout(sendColorBroadcast, now - cooldown.time, channelId);
+  } else if (!cooldown.trigger) {
+    // It isn't; schedule a delayed broadcast if we haven't already done so.
+    cooldown.trigger = setTimeout(sendColorBroadcast, now - cooldown.time, channelId);
   }
 }
 
 function sendColorBroadcast(channelId) {
-  
-    // our HTTP headers to the Twitch API
-    const headers = {
-        'Client-Id': ext.clientId,
-        'Content-Type': 'application/json',
-        'Authorization': bearerPrefix + makeServerToken(channelId)
-    };
-    
-    const currentColor = color(channelColors[channelId] || initialColor).hex();
+  // Set the HTTP headers required by the Twitch API.
+  const headers = {
+    'Client-Id': clientId,
+    'Content-Type': 'application/json',
+    'Authorization': bearerPrefix + makeServerToken(channelId),
+  };
 
-    // our POST body to the Twitch API
-    const body = JSON.stringify({
-        content_type: 'application/json',
-        message: currentColor,
-        targets: [ 'broadcast' ]
-    });
+  // Create the POST body for the Twitch API request.
+  const currentColor = color(channelColors[channelId] || initialColor).hex();
+  const body = JSON.stringify({
+    content_type: 'application/json',
+    message: currentColor,
+    targets: ['broadcast'],
+  });
 
-    verboseLog(STRINGS.color_broadcast, currentColor, channelId);
-
-    // send our broadcast request to Twitch
-    request(
-        `https://api.twitch.tv/extensions/message/${channelId}`,
-        {
-            method: 'POST',
-            headers,
-            body
-        }
-        , (err, res) => {
-            if (err) {
-                console.log(STRINGS.messageSendError, channelId);
-            } else {
-                verboseLog(STRINGS.pubsub_response, channelId, res.statusCode);
-            }
+  // Send the broadcast request to the Twitch API.
+  verboseLog(STRINGS.colorBroadcast, currentColor, channelId);
+  const apiHost = ext.local ? 'localhost.rig.twitch.tv:3000' : 'api.twitch.tv';
+  request(
+    `https://${apiHost}/extensions/message/${channelId}`,
+    {
+      method: 'POST',
+      headers,
+      body,
+    }
+    , (err, res) => {
+      if (err) {
+        console.log(STRINGS.messageSendError, channelId, err);
+      } else {
+        verboseLog(STRINGS.pubsubResponse, channelId, res.statusCode);
+      }
     });
 }
 
+// Create and return a JWT for use by this service.
 function makeServerToken(channelId) {
-  
-    const payload = {
-        exp: Math.floor(Date.now() / 1000) + serverTokenDurationSec,
-        channel_id: channelId,
-        user_id: ext.ownerId, // extension owner ID for the call to Twitch PubSub
-        role: 'external',
-        pubsub_perms: {
-            send: [ '*' ],
-        },
-    }
-
-    const secret = Buffer.from(ext.secret, 'base64');
-    return jwt.sign(payload, secret, { algorithm: 'HS256' });
+  const payload = {
+    exp: Math.floor(Date.now() / 1000) + serverTokenDurationSec,
+    channel_id: channelId,
+    user_id: ownerId, // extension owner ID for the call to Twitch PubSub
+    role: 'external',
+    pubsub_perms: {
+      send: ['*'],
+    },
+  };
+  return jwt.sign(payload, secret, { algorithm: 'HS256' });
 }
 
 function userIsInCooldown(opaqueUserId) {
-  
-    const cooldown = userCooldowns[opaqueUserId];
-    const now = Date.now();
-    if (cooldown && cooldown > now) {
-        return true;
-    }
-    
-    // voting extensions should also track per-user votes to prevent skew
-    userCooldowns[opaqueUserId] = now + userCooldownMs;
-    return false;
+  // Check if the user is in cool-down.
+  const cooldown = userCooldowns[opaqueUserId];
+  const now = Date.now();
+  if (cooldown && cooldown > now) {
+    return true;
+  }
+
+  // Voting extensions must also track per-user votes to prevent skew.
+  userCooldowns[opaqueUserId] = now + userCooldownMs;
+  return false;
 }
 
-(async () => { // we await top-level await ;P
-  
-    // viewer wants to cycle the color
-    server.route({
-        method: 'POST',
-        path: '/color/cycle',
-        handler: colorCycleHandler
-    });
+(async () => {
+  // Handle a viewer request to cycle the color.
+  server.route({
+    method: 'POST',
+    path: '/color/cycle',
+    handler: colorCycleHandler,
+  });
 
-    // new viewer is requesting the color
-    server.route({
-        method: 'GET',
-        path: '/color/query',
-        handler: colorQueryHandler
-    });
+  // Handle a new viewer requesting the color.
+  server.route({
+    method: 'GET',
+    path: '/color/query',
+    handler: colorQueryHandler,
+  });
 
-    await server.start();
+  // Start the server.
+  await server.start();
+  console.log(STRINGS.serverStarted, server.info.uri);
 
-    console.log(STRINGS.server_started, server.info.uri);
-
-    // periodically clear cooldown tracking to prevent unbounded growth due to
-    // per-session logged out user tokens
-    setInterval(function() { userCooldowns = {} }, userCooldownClearIntervalMs)
-
-})(); // IIFE you know what I mean ;)
+  // Periodically clear cool-down tracking to prevent unbounded growth due to
+  // per-session logged-out user tokens.
+  setInterval(() => { userCooldowns = {}; }, userCooldownClearIntervalMs);
+})();
