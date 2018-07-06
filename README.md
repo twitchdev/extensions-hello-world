@@ -33,10 +33,10 @@ Navigate to the root of the Hello World extension folder and run `npm install` a
 
 #### On Windows
 Run the following commands to generate the necessary certs for your Hello World backend
-  1. `node scripts/ssl.js`
-  2. `mkdir ../my-extension/conf`
-  3. `mv ssl/selfsigned.crt ../my-extension/conf/server.crt`
-  4. `mv ssl/selfsigned.key ../my-extension/conf/server.key`
+1. `node scripts/ssl.js`
+2. `mkdir ../my-extension/conf`
+3. `mv ssl/selfsigned.crt ../my-extension/conf/server.crt`
+4. `mv ssl/selfsigned.key ../my-extension/conf/server.key`
 
 ### Running Hello World in Local Mode in the Developer Rig
 You can use the Developer Rig to host your front end files using the `yarn host` commands (see Developer Rig Documentation).
