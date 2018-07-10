@@ -4,7 +4,7 @@
   "description": "Simple Hello World Twitch Extension",
   "main": "index.js",
   "scripts": {
-    "cert": "./bin/generate_cert.sh server",
+    "cert": "node bin/generate_cert.js server",
     "start": "node services/backend"
   },
   "keywords": [
