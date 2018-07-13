@@ -75,7 +75,7 @@ $(function() {
 
     // listen for incoming broadcast message from our EBS
     twitch.listen('broadcast', function (target, contentType, color) {
-        twitch.rig.log('Received broadcast color');
+        twitch.rig.log('\nReceived broadcast color\n');
         updateBlock(color);
     });
 
