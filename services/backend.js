@@ -13,6 +13,7 @@
  *    See the License for the specific language governing permissions and
  *    limitations under the License.
  */
+require('dotenv').config();
 
 const fs = require('fs');
 const Hapi = require('hapi');
@@ -39,7 +40,7 @@ const userCooldownClearIntervalMs = 60000;  // interval to reset our tracking ob
 const channelCooldownMs = 1000;             // maximum broadcast rate per channel
 const bearerPrefix = 'Bearer ';             // HTTP authorization headers have this prefix
 const colorWheelRotation = 30;
-const channelColors = {};
+let channelColor = initialColor;
 const channelCooldowns = {};                // rate limit compliance
 let userCooldowns = {};                     // spam prevention
 
@@ -135,7 +136,7 @@ function colorCycleHandler(req) {
   const { channel_id: channelId, opaque_user_id: opaqueUserId } = payload;
 
   // Store the color for the channel.
-  let currentColor = channelColors[channelId] || initialColor;
+  let currentColor = channelColor;
 
   // Bot abuse prevention:  don't allow a user to spam the button.
   if (userIsInCooldown(opaqueUserId)) {
@@ -147,7 +148,7 @@ function colorCycleHandler(req) {
   currentColor = color(currentColor).rotate(colorWheelRotation).hex();
 
   // Save the new color for the channel.
-  channelColors[channelId] = currentColor;
+  channelColor = currentColor;
 
   // Broadcast the color change to all other extension instances on this channel.
   attemptColorBroadcast(channelId);
@@ -161,7 +162,7 @@ function colorQueryHandler(req) {
 
   // Get the color for the channel from the payload and return it.
   const { channel_id: channelId, opaque_user_id: opaqueUserId } = payload;
-  const currentColor = color(channelColors[channelId] || initialColor).hex();
+  const currentColor = color(channelColor).hex();
   verboseLog(STRINGS.sendColor, currentColor, opaqueUserId);
   return currentColor;
 }
@@ -189,18 +190,18 @@ function sendColorBroadcast(channelId) {
   };
 
   // Create the POST body for the Twitch API request.
-  const currentColor = color(channelColors[channelId] || initialColor).hex();
+  const currentColor = color(channelColor).hex();
   const body = JSON.stringify({
     content_type: 'application/json',
     message: currentColor,
-    targets: ['broadcast'],
+    targets: ['broadcast', 'global'],
   });
 
   // Send the broadcast request to the Twitch API.
   verboseLog(STRINGS.colorBroadcast, currentColor, channelId);
   const apiHost = ext.local ? 'localhost.rig.twitch.tv:3000' : 'api.twitch.tv';
   request(
-    `https://${apiHost}/extensions/message/${channelId}`,
+    `https://${apiHost}/extensions/message/all`,
     {
       method: 'POST',
       headers,
@@ -219,11 +220,11 @@ function sendColorBroadcast(channelId) {
 function makeServerToken(channelId) {
   const payload = {
     exp: Math.floor(Date.now() / 1000) + serverTokenDurationSec,
-    channel_id: channelId,
+    channel_id: 'all',
     user_id: ownerId, // extension owner ID for the call to Twitch PubSub
     role: 'external',
     pubsub_perms: {
-      send: ['*'],
+      send: ['*', 'global', 'broadcast'],
     },
   };
   return jwt.sign(payload, secret, { algorithm: 'HS256' });
