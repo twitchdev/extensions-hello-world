@@ -32,7 +32,7 @@ const verboseLogging = true;
 const verboseLog = verboseLogging ? console.log.bind(console) : () => { };
 
 // Service state variables
-const initialColor = color('#6441A4');      // super important; bleedPurple, etc.
+const initialColor = color('#201fa4');      // blue now.
 const serverTokenDurationSec = 30;          // our tokens for pubsub expire after 30 seconds
 const userCooldownMs = 1000;                // maximum input rate per user to prevent bot abuse
 const userCooldownClearIntervalMs = 60000;  // interval to reset our tracking object
@@ -41,6 +41,8 @@ const bearerPrefix = 'Bearer ';             // HTTP authorization headers have t
 const colorWheelRotation = 30;
 const channelColors = {};
 const channelCooldowns = {};                // rate limit compliance
+const localRigApi = 'localhost.rig.twitch.tv:3000'
+const twitchApi = 'api.twitch.tv'
 let userCooldowns = {};                     // spam prevention
 
 function missingOnline(name, variable) {
@@ -198,7 +200,7 @@ function sendColorBroadcast(channelId) {
 
   // Send the broadcast request to the Twitch API.
   verboseLog(STRINGS.colorBroadcast, currentColor, channelId);
-  const apiHost = ext.local ? 'localhost.rig.twitch.tv:3000' : 'api.twitch.tv';
+  const apiHost = ext.local ? localRigApi : twitchApi;
   request(
     `https://${apiHost}/extensions/message/${channelId}`,
     {
