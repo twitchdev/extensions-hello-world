@@ -19,7 +19,7 @@ __The sample is broken into two main components:__
     * Sends a new color message via Twitch PubSub (or a local mock version of Twitch PubSub for Local Mode) for a specific channel
 
 ## Using the Sample
-The recommended path to using this sample is with the [Developer Rig](/twitchdev/developer-rig). Use the Developer Rig's `extension-init` command to clone this repository.
+The recommended path to using this sample is with the [Developer Rig](https://github.com/twitchdev/developer-rig). Use the Developer Rig's `extension-init` command to clone this repository.
 
 The Developer Rig is able to host the frontend Hello World files, but the EBS must be run and hosted separately.
 
