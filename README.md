@@ -44,7 +44,7 @@ You can use the Developer Rig to host your front end files using the `yarn host`
 To host your EBS in Local Mode, use the following command: `node services/backend -l ../manifest.json`  In this case, the manifest.json file has been generated using a Developer Rig yarn command.  
 
 ### Running Hello World in Online Mode
-To run the EBS, run `node services/backend`, with the following command line arguments: `-c <client id>`, `-s <secret>`, `-o <owner id>`.  To run it in local mode, use only `-l <config-file>` instead. See the [Developer Rig](/twitchdev/developer-rig#configuring-the-developer-rig) for more information about the configuration file.
+To run the EBS, run `node services/backend`, with the following command line arguments: `-c <client id>`, `-s <secret>`, `-o <owner id>`.  To run it in local mode, use only `-l <config-file>` instead. See the [Developer Rig](https://github.com/twitchdev/developer-rig#configuring-the-developer-rig) for more information about the configuration file.
 
 This provides the EBS with your Extension client ID, Extension secret and the user ID of the Extension owner (likely you). These are necessary to validate calls to your EBS and make calls to Twitch services such as PubSub.
 
