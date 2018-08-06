@@ -38,19 +38,19 @@ twitch.onAuthorized(function(auth) {
     tuid = auth.userId;
 
     // enable the button
-    $('#cycle').removeAttr('disabled');
+    document.querySelector('#cycle').removeAttribute('disabled');
 
     setAuth(token);
-    $.ajax(requests.get);
+    ajaxRequest(requests.get);
 });
 
 function updateBlock(hex) {
     twitch.rig.log('Updating block color');
-    $('#color').css('background-color', hex);
+    document.querySelector('#color').style['background-color'] = hex;
 }
 
-function logError(_, error, status) {
-  twitch.rig.log('EBS request returned '+status+' ('+error+')');
+function logError(r) {
+    twitch.rig.log('EBS request returned '+r.status+' ('+r.statusText+')');
 }
 
 function logSuccess(hex, status) {
@@ -59,13 +59,29 @@ function logSuccess(hex, status) {
   twitch.rig.log('EBS request returned '+hex+' ('+status+')');
 }
 
-$(function() {
+function ajaxRequest(request){
+    var r = new XMLHttpRequest();
+    r.open(request.type, request.url, true);
+    Object.keys(request.headers).forEach((h) => { r.setRequestHeader(h, request.headers[h]) });
+    
+    r.onreadystatechange = function () {
+      if (r.readyState != 4) return;
+      if(r.status != 200){
+        request.error(r);
+      }
+      else {
+        request.success(r.responseText);
+      }
+    };
+    r.send();
+}
 
+document.addEventListener("DOMContentLoaded", function(event) {
     // when we click the cycle button
-    $('#cycle').click(function() {
+    document.querySelector('#cycle').addEventListener("click", function() {
         if(!token) { return twitch.rig.log('Not authorized'); }
         twitch.rig.log('Requesting a color cycle');
-        $.ajax(requests.set);
+        ajaxRequest(requests.set);
     });
 
     // listen for incoming broadcast message from our EBS
