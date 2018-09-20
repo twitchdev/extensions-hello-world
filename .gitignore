@@ -1,13 +1,6 @@
 # Temporary files
 *.sw[op]
 
-# Files copied from sub-directories
-public/config.html
-public/live_config.html
-public/panel.html
-public/video_component.html
-public/video_overlay.html
-
 # Configuration
 conf/*
 .DS_Store
