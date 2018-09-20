@@ -65,6 +65,7 @@ const STRINGS = {
   colorBroadcast: 'Broadcasting color %s for c:%s',
   sendColor: 'Sending color %s to c:%s',
   cooldown: 'Please wait before clicking again',
+  invalidAuthHeader: 'Invalid authorization header',
   invalidJwt: 'Invalid JWT',
 };
 
@@ -73,32 +74,35 @@ ext.
   option('-s, --secret <secret>', 'Extension secret').
   option('-c, --client-id <client_id>', 'Extension client ID').
   option('-o, --owner-id <owner_id>', 'Extension owner ID').
-  option('-l, --local <manifest_file>', 'Developer rig local mode').
+  option('-l, --is-local', 'Developer rig local mode').
   parse(process.argv);
 
 const ownerId = getOption('ownerId', 'ENV_OWNER_ID', '100000001');
 const secret = Buffer.from(getOption('secret', 'ENV_SECRET', 'kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk'), 'base64');
 let clientId;
-if (ext.local) {
-  const localFileLocation = path.resolve(process.cwd(), ext.local);
-  clientId = require(localFileLocation).clientId;
+if (ext.isLocal && ext.args.length) {
+  const localFileLocation = path.resolve(ext.args[0]);
+  clientId = require(localFileLocation).id;
 }
 clientId = getOption('clientId', 'ENV_CLIENT_ID', clientId);
-
 // Get options from the command line, environment, or, if local mode is
 // enabled, the local value.
 function getOption(optionName, environmentName, localValue) {
-  if (ext[optionName]) {
-    return ext[optionName];
-  } else if (process.env[environmentName]) {
-    console.log(STRINGS[optionName + 'Env']);
-    return process.env[environmentName];
-  } else if (ext.local) {
-    console.log(STRINGS[optionName + 'Local']);
-    return localValue;
-  }
-  console.log(STRINGS[optionName + 'Missing']);
-  process.exit(1);
+  const option = (() => {
+    if (ext[optionName]) {
+      return ext[optionName];
+    } else if (process.env[environmentName]) {
+      console.log(STRINGS[optionName + 'Env']);
+      return process.env[environmentName];
+    } else if (ext.isLocal && localValue) {
+      console.log(STRINGS[optionName + 'Local']);
+      return localValue;
+    }
+    console.log(STRINGS[optionName + 'Missing']);
+    process.exit(1);
+  })();
+  console.log(`Using "${option}" for ${optionName}`);
+  return option;
 }
 
 const server = new Hapi.Server({
@@ -106,8 +110,8 @@ const server = new Hapi.Server({
   port: 8081,
   tls: {
     // If you need a certificate, execute "npm run cert".
-    key: fs.readFileSync(path.resolve(__dirname, '../conf/server.key')),
-    cert: fs.readFileSync(path.resolve(__dirname, '../conf/server.crt')),
+    key: fs.readFileSync(path.resolve(__dirname, '..', 'conf', 'server.key')),
+    cert: fs.readFileSync(path.resolve(__dirname, '..', 'conf', 'server.crt')),
   },
   routes: {
     cors: {
@@ -124,9 +128,10 @@ function verifyAndDecode(header) {
       return jwt.verify(token, secret, { algorithms: ['HS256'] });
     }
     catch (ex) {
+      throw Boom.unauthorized(STRINGS.invalidJwt);
     }
   }
-  throw Boom.unauthorized(STRINGS.invalidJwt);
+  throw Boom.unauthorized(STRINGS.invalidAuthHeader);
 }
 
 function colorCycleHandler(req) {
@@ -183,7 +188,7 @@ function attemptColorBroadcast(channelId) {
 function sendColorBroadcast(channelId) {
   // Set the HTTP headers required by the Twitch API.
   const headers = {
-    'Client-Id': clientId,
+    'Client-ID': clientId,
     'Content-Type': 'application/json',
     'Authorization': bearerPrefix + makeServerToken(channelId),
   };
@@ -198,7 +203,7 @@ function sendColorBroadcast(channelId) {
 
   // Send the broadcast request to the Twitch API.
   verboseLog(STRINGS.colorBroadcast, currentColor, channelId);
-  const apiHost = ext.local ? 'localhost.rig.twitch.tv:3000' : 'api.twitch.tv';
+  const apiHost = ext.isLocal ? 'localhost.rig.twitch.tv:3000' : 'api.twitch.tv';
   request(
     `https://${apiHost}/extensions/message/${channelId}`,
     {
