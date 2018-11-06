@@ -20,7 +20,7 @@ const path = require('path');
 const Boom = require('boom');
 const color = require('color');
 const ext = require('commander');
-const jwt = require('jsonwebtoken');
+const jsonwebtoken = require('jsonwebtoken');
 const request = require('request');
 
 // The developer rig uses self-signed certificates.  Node doesn't accept them
@@ -43,15 +43,10 @@ const channelColors = {};
 const channelCooldowns = {};                // rate limit compliance
 let userCooldowns = {};                     // spam prevention
 
-function missingOnline(name, variable) {
-  const option = name.charAt(0);
-  return `Extension ${name} required in online mode.\nUse argument "-${option} <${name}>" or environment variable "${variable}".`;
-}
-
 const STRINGS = {
-  secretEnv: 'Using environment variable for secret',
-  clientIdEnv: 'Using environment variable for client-id',
-  ownerIdEnv: 'Using environment variable for owner-id',
+  secretEnv: usingValue('secret'),
+  clientIdEnv: usingValue('client-id'),
+  ownerIdEnv: usingValue('owner-id'),
   secretLocal: 'Using local mode secret',
   clientIdLocal: 'Using local mode client-id',
   ownerIdLocal: 'Using local mode owner-id',
@@ -85,6 +80,55 @@ if (ext.isLocal && ext.args.length) {
   clientId = require(localFileLocation).id;
 }
 clientId = getOption('clientId', 'ENV_CLIENT_ID', clientId);
+
+const server = new Hapi.Server({
+  host: 'localhost',
+  port: 8081,
+  tls: {
+    // If you need a certificate, execute "npm run cert".
+    key: fs.readFileSync(path.resolve(__dirname, '..', 'conf', 'server.key')),
+    cert: fs.readFileSync(path.resolve(__dirname, '..', 'conf', 'server.crt')),
+  },
+  routes: {
+    cors: {
+      origin: ['*'],
+    },
+  },
+});
+
+(async () => {
+  // Handle a viewer request to cycle the color.
+  server.route({
+    method: 'POST',
+    path: '/color/cycle',
+    handler: colorCycleHandler,
+  });
+
+  // Handle a new viewer requesting the color.
+  server.route({
+    method: 'GET',
+    path: '/color/query',
+    handler: colorQueryHandler,
+  });
+
+  // Start the server.
+  await server.start();
+  console.log(STRINGS.serverStarted, server.info.uri);
+
+  // Periodically clear cool-down tracking to prevent unbounded growth due to
+  // per-session logged-out user tokens.
+  setInterval(() => { userCooldowns = {}; }, userCooldownClearIntervalMs);
+})();
+
+function usingValue(name) {
+  return `Using environment variable for ${name}`;
+}
+
+function missingOnline(name, variable) {
+  const option = name.charAt(0);
+  return `Extension ${name} required in online mode.\nUse argument "-${option} <${name}>" or environment variable "${variable}".`;
+}
+
 // Get options from the command line, environment, or, if local mode is
 // enabled, the local value.
 function getOption(optionName, environmentName, localValue) {
@@ -105,27 +149,12 @@ function getOption(optionName, environmentName, localValue) {
   return option;
 }
 
-const server = new Hapi.Server({
-  host: 'localhost',
-  port: 8081,
-  tls: {
-    // If you need a certificate, execute "npm run cert".
-    key: fs.readFileSync(path.resolve(__dirname, '..', 'conf', 'server.key')),
-    cert: fs.readFileSync(path.resolve(__dirname, '..', 'conf', 'server.crt')),
-  },
-  routes: {
-    cors: {
-      origin: ['*'],
-    },
-  },
-});
-
 // Verify the header and the enclosed JWT.
 function verifyAndDecode(header) {
   if (header.startsWith(bearerPrefix)) {
     try {
       const token = header.substring(bearerPrefix.length);
-      return jwt.verify(token, secret, { algorithms: ['HS256'] });
+      return jsonwebtoken.verify(token, secret, { algorithms: ['HS256'] });
     }
     catch (ex) {
       throw Boom.unauthorized(STRINGS.invalidJwt);
@@ -231,7 +260,7 @@ function makeServerToken(channelId) {
       send: ['*'],
     },
   };
-  return jwt.sign(payload, secret, { algorithm: 'HS256' });
+  return jsonwebtoken.sign(payload, secret, { algorithm: 'HS256' });
 }
 
 function userIsInCooldown(opaqueUserId) {
@@ -246,27 +275,3 @@ function userIsInCooldown(opaqueUserId) {
   userCooldowns[opaqueUserId] = now + userCooldownMs;
   return false;
 }
-
-(async () => {
-  // Handle a viewer request to cycle the color.
-  server.route({
-    method: 'POST',
-    path: '/color/cycle',
-    handler: colorCycleHandler,
-  });
-
-  // Handle a new viewer requesting the color.
-  server.route({
-    method: 'GET',
-    path: '/color/query',
-    handler: colorQueryHandler,
-  });
-
-  // Start the server.
-  await server.start();
-  console.log(STRINGS.serverStarted, server.info.uri);
-
-  // Periodically clear cool-down tracking to prevent unbounded growth due to
-  // per-session logged-out user tokens.
-  setInterval(() => { userCooldowns = {}; }, userCooldownClearIntervalMs);
-})();
