@@ -6,7 +6,7 @@ if(process.argv.length < 3) {
 
 // Spawn the process for the platform.
 const { spawn } = require('child_process');
-const cmd = process.platform === 'darwin' ?
+const cmd = process.platform !== 'win32' ?
   spawn('bin/generate_cert.sh', [process.argv[2]]) :
   spawn('cmd.exe', ['/c', 'bin\\generate_cert.cmd', process.argv[2]]);
 let output = '';
