@@ -47,13 +47,10 @@ const STRINGS = {
   secretEnv: usingValue('secret'),
   clientIdEnv: usingValue('client-id'),
   ownerIdEnv: usingValue('owner-id'),
-  secretLocal: 'Using local mode secret',
-  clientIdLocal: 'Using local mode client-id',
-  ownerIdLocal: 'Using local mode owner-id',
   serverStarted: 'Server running at %s',
-  secretMissing: missingOnline('secret', 'EXT_SECRET'),
-  clientIdMissing: missingOnline('client ID', 'EXT_CLIENT_ID'),
-  ownerIdMissing: missingOnline('owner ID', 'EXT_OWNER_ID'),
+  secretMissing: missingValue('secret', 'EXT_SECRET'),
+  clientIdMissing: missingValue('client ID', 'EXT_CLIENT_ID'),
+  ownerIdMissing: missingValue('owner ID', 'EXT_OWNER_ID'),
   messageSendError: 'Error sending message to channel %s: %s',
   pubsubResponse: 'Message to c:%s returned %s',
   cyclingColor: 'Cycling color for c:%s on behalf of u:%s',
@@ -69,16 +66,11 @@ ext.
   option('-s, --secret <secret>', 'Extension secret').
   option('-c, --client-id <client_id>', 'Extension client ID').
   option('-o, --owner-id <owner_id>', 'Extension owner ID').
-  option('-l, --is-local', 'Developer rig local mode').
   parse(process.argv);
 
-const ownerId = getOption('ownerId', 'ENV_OWNER_ID', '100000001');
-const secret = Buffer.from(getOption('secret', 'ENV_SECRET', 'kkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkkk'), 'base64');
+const ownerId = getOption('ownerId', 'ENV_OWNER_ID');
+const secret = Buffer.from(getOption('secret', 'ENV_SECRET'), 'base64');
 let clientId;
-if (ext.isLocal && ext.args.length) {
-  const localFileLocation = path.resolve(ext.args[0]);
-  clientId = require(localFileLocation).id;
-}
 clientId = getOption('clientId', 'ENV_CLIENT_ID', clientId);
 
 const server = new Hapi.Server({
@@ -124,23 +116,19 @@ function usingValue(name) {
   return `Using environment variable for ${name}`;
 }
 
-function missingOnline(name, variable) {
+function missingValue(name, variable) {
   const option = name.charAt(0);
-  return `Extension ${name} required in online mode.\nUse argument "-${option} <${name}>" or environment variable "${variable}".`;
+  return `Extension ${name} required.\nUse argument "-${option} <${name}>" or environment variable "${variable}".`;
 }
 
-// Get options from the command line, environment, or, if local mode is
-// enabled, the local value.
-function getOption(optionName, environmentName, localValue) {
+// Get options from the command line or the environment.
+function getOption(optionName, environmentName) {
   const option = (() => {
     if (ext[optionName]) {
       return ext[optionName];
     } else if (process.env[environmentName]) {
       console.log(STRINGS[optionName + 'Env']);
       return process.env[environmentName];
-    } else if (ext.isLocal && localValue) {
-      console.log(STRINGS[optionName + 'Local']);
-      return localValue;
     }
     console.log(STRINGS[optionName + 'Missing']);
     process.exit(1);
@@ -232,9 +220,8 @@ function sendColorBroadcast(channelId) {
 
   // Send the broadcast request to the Twitch API.
   verboseLog(STRINGS.colorBroadcast, currentColor, channelId);
-  const apiHost = ext.isLocal ? 'localhost.rig.twitch.tv:3000' : 'api.twitch.tv';
   request(
-    `https://${apiHost}/extensions/message/${channelId}`,
+    `https://api.twitch.tv/extensions/message/${channelId}`,
     {
       method: 'POST',
       headers,
