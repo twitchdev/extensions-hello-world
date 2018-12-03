@@ -70,23 +70,26 @@ ext.
 
 const ownerId = getOption('ownerId', 'ENV_OWNER_ID');
 const secret = Buffer.from(getOption('secret', 'ENV_SECRET'), 'base64');
-let clientId;
-clientId = getOption('clientId', 'ENV_CLIENT_ID', clientId);
+const clientId = getOption('clientId', 'ENV_CLIENT_ID');
 
-const server = new Hapi.Server({
+const serverOptions = {
   host: 'localhost',
   port: 8081,
-  tls: {
-    // If you need a certificate, execute "npm run cert".
-    key: fs.readFileSync(path.resolve(__dirname, '..', 'conf', 'server.key')),
-    cert: fs.readFileSync(path.resolve(__dirname, '..', 'conf', 'server.crt')),
-  },
   routes: {
     cors: {
       origin: ['*'],
     },
   },
-});
+};
+const serverPathRoot = path.resolve(__dirname, '..', 'conf', 'server');
+if (fs.existsSync(serverPathRoot + '.crt') && fs.existsSync(serverPathRoot + '.key')) {
+  serverOptions.tls = {
+    // If you need a certificate, execute "npm run cert".
+    cert: fs.readFileSync(serverPathRoot + '.crt'),
+    key: fs.readFileSync(serverPathRoot + '.key'),
+  };
+}
+const server = new Hapi.Server(serverOptions);
 
 (async () => {
   // Handle a viewer request to cycle the color.
