@@ -68,9 +68,9 @@ ext.
   option('-o, --owner-id <owner_id>', 'Extension owner ID').
   parse(process.argv);
 
-const ownerId = getOption('ownerId', 'ENV_OWNER_ID');
-const secret = Buffer.from(getOption('secret', 'ENV_SECRET'), 'base64');
-const clientId = getOption('clientId', 'ENV_CLIENT_ID');
+const ownerId = getOption('ownerId', 'EXT_OWNER_ID');
+const secret = Buffer.from(getOption('secret', 'EXT_SECRET'), 'base64');
+const clientId = getOption('clientId', 'EXT_CLIENT_ID');
 
 const serverOptions = {
   host: 'localhost',
