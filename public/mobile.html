@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Viewer Page</title>
+</head>
+<body style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;">
+    <div id="app" class="full-height"></div>
+    <script src="https://extension-files.twitch.tv/helper/v1/twitch-ext.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.3.1.min.js"
+            integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8="
+            crossorigin="anonymous"></script>
+    <script src="viewer.js" type="text/javascript"></script>
+    <h2>Hello, World!</h2>
+    <p>Would you care to cycle a color?</p>
+    <div>
+        <input type="button" id="cycle" disabled="disabled" value="Yes, I would" />
+    </div>
+    <div style="float: left; position: relative; left: 50%">
+        <div id="color" style="border-radius: 50px; transition: background-color 0.5s ease; margin-top: 30px; width: 100px; height: 100px; background-color: #6441A4; float: left; position: relative; left: -50%">
+        </div>
+    </div>
+    <div id="list">
+    </div>
+</body>
+</html>
