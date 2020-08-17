@@ -2,7 +2,7 @@
 The Simplest Extension in the (Hello) World.
 
 ## Motivation
-The Hello World sample is designed to get you started building a Twitch Extension quickly. It contains all the key parts of a functioning Extension and can be immediately run in the [Developer Rig](https://github.com/twitchdev/developer-rig).  For a fast guide to get started, visit the Developer Rig documentation.
+The Hello World sample is designed to get you started building a Twitch Extension quickly. It contains all the key parts of a functioning Extension and can be immediately run in the [Developer Rig](https://dev.twitch.tv/docs/extensions/rig/).  For a fast guide to get started, visit the Developer Rig documentation.
 
 ## What's in the Sample
 The Hello World Extension provides a simple scenario that demonstrates the end-to-end flow of an Extension. On the frontend, a user clicks a button that can change the color of a circle. Instead of changing the CSS locally, it calls its Extension Backend Service (EBS) to update the color of the circle. That message is then sent via Twitch PubSub to update all clients listening to the PubSub topic.
@@ -19,7 +19,7 @@ __The sample is broken into two main components:__
     * Sends a new color message via Twitch PubSub for a specific channel
 
 ## Using the Sample
-The recommended path to using this sample is with the [Developer Rig](https://github.com/twitchdev/developer-rig).  Use the Developer Rig's `extension-init` command to clone this repository.
+The recommended path to using this sample is with the [Developer Rig](https://dev.twitch.tv/docs/extensions/rig/).  Use the Developer Rig's `extension-init` command to clone this repository.
 
 The Developer Rig is able to host the frontend Hello World files, but the EBS must be run and hosted separately.
 
