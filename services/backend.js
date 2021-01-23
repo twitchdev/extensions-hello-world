@@ -250,7 +250,7 @@ function makeServerToken(channelId) {
       send: ['*'],
     },
   };
-  return jsonwebtoken.sign(payload, secret, { algorithm: 'HS256' });
+  return jsonwebtoken.sign(payload, Buffer.from(secret, "base64"), { algorithm: 'HS256' });
 }
 
 function userIsInCooldown(opaqueUserId) {
