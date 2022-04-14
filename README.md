@@ -52,7 +52,8 @@ You can get your client ID and secret from your [Extension Dashboard](https://de
 To get the owner ID, you will need to execute a simple CURL command against the Twitch `/users` endpoint. You'll need your extension client ID as part of the query (this will be made consistent with the Developer Rig shortly, by using _owner name_).
 
 ```bash
-curl -H "Client-ID: <client id>" -X GET "https://api.twitch.tv/helix/users?login=<owner name>" -H "Authorization: Bearer <token>"
+curl -H "Client-ID: <client id>" -X GET "https://api.twitch.tv/helix/users?login=<owner name>" \
+-H "Authorization: Bearer <token>"
 ```
 
 To get the token, follow [Twitch API](https://dev.twitch.tv/docs/api/) guide Step 2.
